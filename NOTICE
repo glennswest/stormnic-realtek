@@ -1,0 +1,6 @@
+stormnic-realtek
+================
+
+An original Rust implementation, licensed MIT (see LICENSE).
+
+Acknowledgement: hardware facts are learned from the Linux r8169 driver and iPXE's realtek.c (behaviour only). No source code is copied.
