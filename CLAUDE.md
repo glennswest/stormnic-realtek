@@ -81,8 +81,9 @@ sc-build scripts/test-host.sh        # simulated-chip tests
         pause frames on the switch port while it sits in stormbootx
 - [ ] #1 the whole family, pinned in stormbootx's nic-drivers (P3)
   - [x] RTL8125/8126: written under #2 (fdd6d60)
-  - [ ] **Waiting on the owner (2026-11-07, needs-owner):** RTL8111/8168
-        (10ec:8168, 8161, 2600) has no test machine, and its only permissive
-        source, re(4), is 4-clause BSD. Asked on #1: 1 split it off and close
-        #1 on 8125/8126 verified on the O6N (recommended); 2 simulation only,
-        as stormnic-ixgbe#23; 3 name a machine. No 8168 code until answered.
+  - [x] RTL8111/8168 split off to #4 (P3, paused until a machine with that
+        port exists; re(4) licence question waits there) — master's decision
+        on #1, 2026-11-07, option 1
+  - [ ] #1 closes when the RTL8125/8126 driver binds on a real chip (the O6N,
+        #2) and is pinned in stormbootx's nic-drivers (stormbootx#172);
+        proposed after #2

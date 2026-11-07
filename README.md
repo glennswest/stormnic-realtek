@@ -23,8 +23,8 @@ RTL8125, so the first real run is the O6N (#2).
 | `10ec:5000` | Killer E5000 5GbE Controller | as 8126 |
 
 An unknown revision (RTL8127, 0x6c9, among them) is refused before anything
-is written. The RTL8111/8168 gigabit family (`10ec:8168`) is not bound yet
-(#1).
+is written. The RTL8111/8168 gigabit family (`10ec:8168`) is not bound: it waits for a
+test machine (#4).
 
 The driver declines a function another driver already holds `BY_DRIVER`, so
 the platform's own driver wins. The O6N's firmware has one; stormbootx takes
