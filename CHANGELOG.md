@@ -7,6 +7,7 @@
 - **feat:** 802.3x flow control off: the PHY advertises no pause unless the EFI variable `StormnicRealtekPause` is set, so a NIC whose ring nobody drains drops frames instead of flooding the LAN (owner on #2, 2026-10-28).
 - **feat:** the NIC is quiesced (interrupts masked, stop request, MAC reset, nothing accepted) at every Start failure, SNP Shutdown/Stop, binding Stop and ExitBootServices whatever the SNP state; RX/TX run only between SNP Initialize and Shutdown. A reset that does not complete turns bus mastering off.
 - **feat:** aarch64 DMA ordering (`dmb oshst`/`dmb oshld`/`dsb st`) around descriptor ownership and the doorbell.
+- **docs:** refreshed README/docs/CLAUDE.md against the code (2026-11-07): all claims (IDs, revisions, ring sizes, variables, scripts, 36 host tests) match; fixed a README typo. No unmet promises found, so no issues filed.
 - **docs:** NOTICE now credits OpenBSD rge(4) (ISC) as the source of the hardware facts; docs/hardware.md; README; CLAUDE.md work plan.
 - **fix:** clippy `enum_variant_names` on PciIo `MapOp` (#3).
 - **test:** host tests against a simulated chip (`scripts/test-host.sh`); `scripts/check-driver.sh` builds both targets, runs clippy with `-D warnings` and checks PE machine and subsystem 11. Verified on a build VM: 36 host tests (c161a1f), both targets clean (c9f3a1a).

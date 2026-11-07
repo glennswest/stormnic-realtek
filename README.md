@@ -26,7 +26,7 @@ An unknown revision (RTL8127, 0x6c9, among them) is refused before anything
 is written. The RTL8111/8168 gigabit family (`10ec:8168`) is not bound yet
 (#1).
 
-Supported declines a function another driver already holds `BY_DRIVER`, so
+The driver declines a function another driver already holds `BY_DRIVER`, so
 the platform's own driver wins. The O6N's firmware has one; stormbootx takes
 the NIC from it with `prefer_media_drivers = realtek` (stormbootx#172).
 
