@@ -16,6 +16,10 @@ pub struct Ring {
     pub dropped: usize,
 }
 
+impl Default for Ring {
+    fn default() -> Self { Ring::new() }
+}
+
 impl Ring {
     pub const fn new() -> Self { Ring { lines: VecDeque::new(), dropped: 0 } }
 

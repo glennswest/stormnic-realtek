@@ -142,6 +142,15 @@ pub enum Chip {
     R26(u8),
 }
 
+impl core::fmt::Display for Chip {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Chip::R25D(rev) | Chip::R26(rev) => write!(f, "{} rev {rev}", self.name()),
+            _ => f.write_str(self.name()),
+        }
+    }
+}
+
 impl Chip {
     pub fn from_txcfg(txcfg: u32) -> Option<Chip> {
         match txcfg & TXCFG_HWREV {
@@ -164,7 +173,9 @@ impl Chip {
         }
     }
 
-    /// The fastest speed the chip's PHY can link at, Mb/s.
+    /// The fastest speed the chip's PHY can link at, Mb/s (the tests'
+    /// expected link speed).
+    #[allow(dead_code)]
     pub fn max_mbps(self) -> u32 {
         if matches!(self, Chip::R26(_)) { 5000 } else { 2500 }
     }
@@ -499,7 +510,7 @@ pub const RX_MAX: u16 = 2048;
 pub fn mac_init<B: Bus>(b: &mut B, chip: Chip, mac: [u8; 6], rings: Rings, promiscuous: bool) -> R<(), B::Error> {
     unlock(b)?;
     b.w32(MAC0, u32::from_le_bytes([mac[0], mac[1], mac[2], mac[3]]))?;
-    b.w32(MAC4, u32::from(mac[4]) | u32::from(mac[5]) << 8)?;
+    b.w32(MAC4, u32::from(mac[4]) | (u32::from(mac[5]) << 8))?;
     clr8(b, CFG_F1, 0x80)?;
     no_aspm(b, chip)?;
     b.w16(EEE_TXIDLE, 1500 + 14 + 32)?;

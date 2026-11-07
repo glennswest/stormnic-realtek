@@ -133,6 +133,7 @@ impl DmaRegion {
     }
 }
 
+#[derive(Default)]
 pub struct RealtekDriver {
     bound: Vec<Bound>,
 }
@@ -336,7 +337,7 @@ impl RealtekDriver {
         };
         trace!(
             "stormnic-realtek: {at} 10ec:{dev:04x}: BAR {bar}, {} (TXCFG {:#010x}), MAC {}, link {} before reset",
-            id.chip.name(), id.txcfg, mac_str(id.mac), id.link
+            id.chip, id.txcfg, mac_str(id.mac), id.link
         );
         let (dma, net, link) = match dma_up(&pci, bar, &at, dev, &id) {
             Ok(r) => r,
@@ -362,7 +363,7 @@ impl RealtekDriver {
         // The one default line per NIC (stormnic-ixgbe#22).
         say!(
             "stormnic-realtek {}: {at} 10ec:{dev:04x} {}: MAC {}, link {}, SNP installed",
-            env!("CARGO_PKG_VERSION"), id.chip.name(), mac_str(id.mac), link
+            env!("CARGO_PKG_VERSION"), id.chip, mac_str(id.mac), link
         );
         console::begin();
         Ok(())

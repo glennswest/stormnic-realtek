@@ -196,7 +196,7 @@ impl Net {
     /// Copy `f` into the next transmit buffer and hand it to the chip.
     /// Ok(false) when every descriptor is still in flight.
     pub fn transmit<B: Bus>(&mut self, b: &mut B, f: &[u8]) -> R<bool, B::Error> {
-        if f.len() < MIN_FRAME || f.len() > MAX_FRAME { return Err(Error::Frame { len: f.len() }); }
+        if !(MIN_FRAME..=MAX_FRAME).contains(&f.len()) { return Err(Error::Frame { len: f.len() }); }
         self.reclaim();
         if self.tx_pending() == TX_COUNT {
             // Every descriptor is in flight. Ring the doorbell again in case
@@ -241,7 +241,7 @@ impl Net {
             dma_rmb();
             let len = (s & RX_LEN) as usize;
             let whole = s & (RX_SOF | RX_EOF) == RX_SOF | RX_EOF;
-            if s & RX_ERR != 0 || !whole || len < MIN_FRAME + CRC || len > BUF_SIZE {
+            if s & RX_ERR != 0 || !whole || !(MIN_FRAME + CRC..=BUF_SIZE).contains(&len) {
                 self.rx_errors += 1;
                 self.skip();
                 continue;
