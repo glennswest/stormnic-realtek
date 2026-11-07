@@ -79,5 +79,10 @@ sc-build scripts/test-host.sh        # simulated-chip tests
         shows `stormnic-realtek 0.1.0: … RTL8125…: MAC …, link up … flow
         control off, SNP installed`, a DHCP lease and an NVMe/TCP claim; no
         pause frames on the switch port while it sits in stormbootx
-- [ ] #1 RTL8111/8168 (10ec:8168): not in this pass (different MAC init;
-      FreeBSD re(4) would be the source). Stays P3, paused.
+- [ ] #1 the whole family, pinned in stormbootx's nic-drivers (P3)
+  - [x] RTL8125/8126: written under #2 (fdd6d60)
+  - [ ] **Waiting on the owner (2026-11-07, needs-owner):** RTL8111/8168
+        (10ec:8168, 8161, 2600) has no test machine, and its only permissive
+        source, re(4), is 4-clause BSD. Asked on #1: 1 split it off and close
+        #1 on 8125/8126 verified on the O6N (recommended); 2 simulation only,
+        as stormnic-ixgbe#23; 3 name a machine. No 8168 code until answered.
