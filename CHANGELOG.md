@@ -8,7 +8,8 @@
 - **feat:** the NIC is quiesced (interrupts masked, stop request, MAC reset, nothing accepted) at every Start failure, SNP Shutdown/Stop, binding Stop and ExitBootServices whatever the SNP state; RX/TX run only between SNP Initialize and Shutdown. A reset that does not complete turns bus mastering off.
 - **feat:** aarch64 DMA ordering (`dmb oshst`/`dmb oshld`/`dsb st`) around descriptor ownership and the doorbell.
 - **docs:** NOTICE now credits OpenBSD rge(4) (ISC) as the source of the hardware facts; docs/hardware.md; README; CLAUDE.md work plan.
-- **test:** host tests against a simulated chip (`scripts/test-host.sh`); `scripts/check-driver.sh` builds both targets, runs clippy with `-D warnings` and checks PE machine and subsystem 11.
+- **fix:** clippy `enum_variant_names` on PciIo `MapOp` (#3).
+- **test:** host tests against a simulated chip (`scripts/test-host.sh`); `scripts/check-driver.sh` builds both targets, runs clippy with `-D warnings` and checks PE machine and subsystem 11. Verified on a build VM: 36 host tests (c161a1f), both targets clean (c9f3a1a).
 
 ### 2026-10-07
 - **chore:** repository created (owner: low priority, paused)

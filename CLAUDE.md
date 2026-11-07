@@ -65,17 +65,19 @@ sc-build scripts/test-host.sh        # simulated-chip tests
 ## Work plan
 
 - [ ] #2 aarch64 + O6N (P0; covers #1's driver for the RTL8125/8126 family)
-  - [ ] Scaffold: Cargo.toml, build.rs (subsystem 11), Cargo.lock, console,
-        trace, decode, pci_io from stormnic-virtio
-  - [ ] Hardware core from rge(4): chip ID (TXCFG), reset + exit OOB, MAC,
-        MAC/PHY OCP + CSI access, MAC init, rings (RX 32-byte v1, TX 16-byte),
-        PHY advertisement without pause, link/speed/pause from PHYSTAT, quiesce
-  - [ ] SNP core + UEFI glue (binding, SNP, ExitBootServices quiesce)
-  - [ ] Host tests against a simulated chip
-  - [ ] sc-build: x86_64-unknown-uefi and aarch64-unknown-uefi, no warnings
-  - [ ] stormbootx: pin the commit in build-nic-drivers.sh and put it on the
-        arm64 media (filed on stormbootx, stormbootx#172's part)
-  - [ ] On the O6N: lspci confirms 10ec:8125 (owner); boot shows the
-        driver's line, DHCP lease and an NVMe/TCP claim
+  - [x] Scaffold, hardware core, SNP core + UEFI glue, host tests (54d55b4, c161a1f)
+  - [x] sc-build 2026-11-07: `scripts/test-host.sh` at c161a1f, 36 tests pass;
+        `scripts/check-driver.sh` at c9f3a1a: x86_64 (60,416 B) and aarch64
+        (56,320 B) PE32+ subsystem 11, clippy -D warnings clean (#3 was the
+        one clippy finding, closed)
+  - [ ] stormbootx: pin c9f3a1a in build-nic-drivers.sh, built for
+        aarch64-unknown-uefi, on the arm64 media with
+        `prefer_media_drivers = realtek` (stormbootx#172, asked there);
+        #2 is proposed after it
+  - [ ] On the O6N (owner's hands; not a registered test machine yet):
+        `lspci -nn` confirms 10ec:8125 or 8126; the stormbootx-arm64 boot
+        shows `stormnic-realtek 0.1.0: … RTL8125…: MAC …, link up … flow
+        control off, SNP installed`, a DHCP lease and an NVMe/TCP claim; no
+        pause frames on the switch port while it sits in stormbootx
 - [ ] #1 RTL8111/8168 (10ec:8168): not in this pass (different MAC init;
       FreeBSD re(4) would be the source). Stays P3, paused.
