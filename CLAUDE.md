@@ -79,6 +79,11 @@ sc-build scripts/test-host.sh        # simulated-chip tests
         shows `stormnic-realtek 0.1.0: … RTL8125…: MAC …, link up … flow
         control off, SNP installed`, a DHCP lease and an NVMe/TCP claim; no
         pause frames on the switch port while it sits in stormbootx
+- [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
+      with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
+      none at 10/100/1000, the PHY's own LDPC at 2.5G/5G, nothing to
+      configure) and link; link down is an `error:` line. Same form as
+      stormnic-igb b065f80. In progress 2026-11-13.
 - [ ] #1 the whole family, pinned in stormbootx's nic-drivers (P3)
   - [x] RTL8125/8126: written under #2 (fdd6d60)
   - [x] RTL8111/8168 split off to #4 (P3, paused until a machine with that
