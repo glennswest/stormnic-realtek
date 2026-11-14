@@ -72,11 +72,30 @@ the NIC from it with `prefer_media_drivers = realtek` (stormbootx#172).
 
 ## Console
 
-One line per NIC by default:
+One line per port by default, the stormnic contract's (#5): driver and
+version, PCI address, PCI ID, chip, MAC, media, speed, FEC and link:
 
 ```
-stormnic-realtek 0.1.0: 0000:01:00.0 10ec:8125 RTL8125B: MAC 00:e0:4c:68:01:25, link up 2500 Mb/s full duplex, flow control off, SNP installed
+stormnic-realtek 0.2.0: 0000:01:00.0 10ec:8125 RTL8125B: MAC 00:e0:4c:68:01:25, media 2.5GBASE-T, speed 2500 Mb/s full duplex, FEC LDPC, link UP
 ```
+
+A port without link is an error line:
+
+```
+stormnic-realtek 0.2.0: 0000:01:00.0 10ec:8125 RTL8125B: MAC 00:e0:4c:68:01:25, media copper, speed none, FEC none, link DOWN: error: no link after 5000 ms of autonegotiation (check the cable and the link partner)
+```
+
+(`… no link (down before the MAC reset too; …)` when the advertisement was
+already right, so nothing was renegotiated and Start did not wait.)
+
+**FEC** is the IEEE 802.3 standard for the media and speed, which the
+driver applies itself; the loader hands nothing down. Every port of this
+family is twisted-pair copper, whose FEC is part of the PHY: **none** for
+10BASE-T, 100BASE-TX and 1000BASE-T, and the **LDPC** code of the
+2.5GBASE-T / 5GBASE-T PCS (Clause 126), always on in the PHY. The MAC has
+no FEC block, so there is nothing to configure; the line says what runs
+(`rtl::standard_fec`). The flow-control result and "SNP installed" are in
+the trace.
 
 Warnings and failures always print, with the trace steps that led to them.
 The full trace (BAR, TXCFG, advertisement before and after, DMA region,

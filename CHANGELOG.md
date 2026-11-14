@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-11-13
+- **feat:** the stormnic contract (#5): the driver owns its port's bring-up
+  (advertisement, autonegotiation, link; the IEEE 802.3 FEC for the media
+  and speed, `rtl::standard_fec`: none to 1000BASE-T, the PHY's own LDPC at
+  2.5GBASE-T/5GBASE-T, nothing to configure) and prints one line per port:
+  driver, PCI address, PCI ID, chip, MAC, media, speed, FEC, link. A port
+  without link is an `error:` line. The old line's flow-control and "SNP
+  installed" details moved to the trace.
+
 ### 2026-11-07
 - **docs:** #1 scope: RTL8111/8168 (10ec:8168, 8161, 2600) split off to #4, P3 and paused until a test machine exists (master's decision on #1, option 1); #1 closes on the RTL8125/8126 driver verified on the O6N and pinned in stormbootx's nic-drivers.
 - **feat:** the driver, for the RTL8125/RTL8126 family (10ec:8125, 8126, 3000, 5000; RTL8125A/B/D, RTL8126A by TXCFG HWREV), built for `x86_64-unknown-uefi` and `aarch64-unknown-uefi` (#2). `EFI_DRIVER_BINDING_PROTOCOL` + `EFI_SIMPLE_NETWORK_PROTOCOL` on a child handle, polled, 32 x 2 KiB rings each way, one console line per NIC (trace behind `StormnicVerbose`).

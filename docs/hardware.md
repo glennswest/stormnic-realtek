@@ -123,3 +123,15 @@ OWN, `dmb oshld` between seeing OWN clear and reading the frame, `dsb st`
 before the doorbell. DMA memory is PciIo AllocateBuffer +
 Map(BusMasterCommonBuffer): on a platform whose PCIe is not cache coherent
 the firmware hands out uncached memory for it.
+
+## Media, speed and FEC
+
+Every port of the family is twisted-pair copper (BASE-T). The speed comes
+from PHYSTAT (0x6c) once autonegotiation resolves: 10BASE-T, 100BASE-TX,
+1000BASE-T, 2.5GBASE-T, and 5GBASE-T on the RTL8126. IEEE 802.3 puts the
+forward error correction of these media inside the PHY's PCS: 1000BASE-T
+and below have none; 2.5GBASE-T and 5GBASE-T (Clause 126) carry an LDPC
+code that is always on and has no MAC-side setting. So the standard FEC is
+reached by negotiating the speed, and the MAC has no FEC register to write;
+the per-port line reports the FEC that follows from the speed
+(`rtl::standard_fec`, #5).

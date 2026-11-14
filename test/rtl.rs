@@ -289,3 +289,51 @@ trait Isr { fn put_isr(&mut self, v: u32); }
 impl Isr for Dev {
     fn put_isr(&mut self, v: u32) { self.regs[0x3c..0x40].copy_from_slice(&v.to_le_bytes()); }
 }
+
+// #5: the stormnic contract's per-port line.
+
+#[test]
+fn the_standard_fec_is_none_to_1000base_t_and_the_phy_s_ldpc_at_2500_and_5000() {
+    for mbps in [0, 10, 100, 1000] {
+        assert_eq!(rtl::standard_fec(mbps), rtl::Fec::None, "{mbps}");
+    }
+    for mbps in [2500, 5000] {
+        assert_eq!(rtl::standard_fec(mbps), rtl::Fec::Ldpc, "{mbps}");
+    }
+    assert_eq!(rtl::media(2500), "2.5GBASE-T");
+    assert_eq!(rtl::media(5000), "5GBASE-T");
+    assert_eq!(rtl::media(100), "100BASE-TX");
+}
+
+fn port_line(chip: Chip, link: Link, waited_ms: u32) -> String {
+    format!(
+        "{}",
+        rtl::PortLine { version: "0.2.0", at: "0000:01:00.0", device: 0x8125, chip, mac: MAC, link, waited_ms }
+    )
+}
+
+fn mac() -> String {
+    let m = MAC;
+    format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}", m[0], m[1], m[2], m[3], m[4], m[5])
+}
+
+#[test]
+fn the_port_line_names_driver_address_mac_media_speed_fec_and_link() {
+    let l = port_line(Chip::R25B, Link::from_phystat(rtl::PHYSTAT_LINK | rtl::PHYSTAT_FDX | rtl::PHYSTAT_2500), 0);
+    assert_eq!(
+        l,
+        format!("stormnic-realtek 0.2.0: 0000:01:00.0 10ec:8125 RTL8125B: MAC {}, media 2.5GBASE-T, speed 2500 Mb/s full duplex, FEC LDPC, link UP", mac())
+    );
+    let l = port_line(Chip::R25B, Link::from_phystat(rtl::PHYSTAT_LINK | rtl::PHYSTAT_FDX | rtl::PHYSTAT_1000), 0);
+    assert!(l.ends_with("media 1000BASE-T, speed 1000 Mb/s full duplex, FEC none, link UP"), "{l}");
+    assert!(!l.contains("error"));
+}
+
+#[test]
+fn a_port_without_link_is_an_error_line() {
+    let l = port_line(Chip::R26(1), Link::default(), 5000);
+    assert!(l.contains("10ec:8125 RTL8126A rev 1:"), "{l}");
+    assert!(l.ends_with("media copper, speed none, FEC none, link DOWN: error: no link after 5000 ms of autonegotiation (check the cable and the link partner)"), "{l}");
+    let l = port_line(Chip::R25, Link::default(), 0);
+    assert!(l.contains("link DOWN: error: no link (down before the MAC reset too"), "{l}");
+}

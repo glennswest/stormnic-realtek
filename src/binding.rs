@@ -339,7 +339,7 @@ impl RealtekDriver {
             "stormnic-realtek: {at} 10ec:{dev:04x}: BAR {bar}, {} (TXCFG {:#010x}), MAC {}, link {} before reset",
             id.chip, id.txcfg, mac_str(id.mac), id.link
         );
-        let (dma, net, link) = match dma_up(&pci, bar, &at, dev, &id) {
+        let (dma, net, link, waited_ms) = match dma_up(&pci, bar, &at, dev, &id) {
             Ok(r) => r,
             Err(()) => {
                 restore(&pci, &attributes);
@@ -360,11 +360,17 @@ impl RealtekDriver {
             }
         };
         self.bound.push(Bound { controller, location, decode: attributes, dma, port, pci });
-        // The one default line per NIC (stormnic-ixgbe#22).
+        // The one default line per port (stormnic-ixgbe#22), in the stormnic
+        // contract's form (#5): driver, PCI address, MAC, media, speed, FEC,
+        // link; a port without link is an error line.
         say!(
-            "stormnic-realtek {}: {at} 10ec:{dev:04x} {}: MAC {}, link {}, SNP installed",
-            env!("CARGO_PKG_VERSION"), id.chip, mac_str(id.mac), link
+            "{}",
+            rtl::PortLine {
+                version: env!("CARGO_PKG_VERSION"), at: &at, device: dev, chip: id.chip,
+                mac: id.mac, link, waited_ms,
+            }
         );
+        trace!("stormnic-realtek: {at} 10ec:{dev:04x}: link {link}, SNP installed");
         console::begin();
         Ok(())
     }
@@ -409,7 +415,7 @@ impl RealtekDriver {
 /// Everything is logged; Err(()) means Start fails (the region is released,
 /// or kept with bus mastering off if the NIC would not quiesce).
 fn dma_up(pci: &PciIo, bar: u8, at: &impl core::fmt::Display, dev: u16, id: &Identity)
-    -> core::result::Result<(DmaRegion, Net, Link), ()> {
+    -> core::result::Result<(DmaRegion, Net, Link, u32), ()> {
     let mut bars = Bars { pci, bar };
     let region = match DmaRegion::new(pci) {
         Ok(r) => r,
@@ -428,7 +434,7 @@ fn dma_up(pci: &PciIo, bar: u8, at: &impl core::fmt::Display, dev: u16, id: &Ide
     }
     match net.stop(&mut bars) {
         Ok(()) => match checked {
-            Ok(link) => Ok((region, net, link)),
+            Ok((link, waited_ms)) => Ok((region, net, link, waited_ms)),
             Err(_) => {
                 region.release(pci);
                 say!("stormnic-realtek: {at} 10ec:{dev:04x}: NIC quiesced, DMA region released; releasing");
@@ -444,7 +450,7 @@ fn dma_up(pci: &PciIo, bar: u8, at: &impl core::fmt::Display, dev: u16, id: &Ide
 }
 
 fn bring_up(bars: &mut Bars, net: &mut Net, chip: Chip, at: &impl core::fmt::Display, dev: u16, device: u64)
-    -> core::result::Result<Link, rtl::Error<Status>> {
+    -> core::result::Result<(Link, u32), rtl::Error<Status>> {
     let pause = console::pause();
     net.start(bars, false)?;
     let before = rtl::advertised(bars)?;
@@ -458,7 +464,8 @@ fn bring_up(bars: &mut Bars, net: &mut Net, chip: Chip, at: &impl core::fmt::Dis
     } else {
         trace!("stormnic-realtek: {at} 10ec:{dev:04x}: PHY advertisement already right (ANAR {:#06x})", before.anar);
     }
-    let link = rtl::wait_link(bars, if restarted { 5000 } else { 0 })?;
+    let waited_ms = if restarted { 5000 } else { 0 };
+    let link = rtl::wait_link(bars, waited_ms as usize)?;
     trace!(
         "stormnic-realtek: {at} 10ec:{dev:04x}: DMA: {} pages at device {device:#x}, rings RX {} / TX {} x {} B; link {link}",
         ring::DMA_PAGES, ring::RX_COUNT, ring::TX_COUNT, ring::BUF_SIZE
@@ -474,7 +481,7 @@ fn bring_up(bars: &mut Bars, net: &mut Net, chip: Chip, at: &impl core::fmt::Dis
     } else {
         trace!("stormnic-realtek: {at} 10ec:{dev:04x}: DMA check skipped: link down");
     }
-    Ok(link)
+    Ok((link, waited_ms))
 }
 
 /// The NIC would not quiesce: it might still DMA into the region, so it is

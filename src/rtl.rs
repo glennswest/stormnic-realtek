@@ -274,6 +274,88 @@ impl core::fmt::Display for Link {
     }
 }
 
+/// The FEC a port runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fec {
+    /// No FEC: what IEEE 802.3 specifies for 10BASE-T, 100BASE-TX and
+    /// 1000BASE-T, and what is said while there is no link.
+    None,
+    /// The LDPC code that is part of the 2.5GBASE-T / 5GBASE-T PCS
+    /// (802.3 Clause 126): always on in the PHY, nothing to configure.
+    Ldpc,
+}
+
+impl Fec {
+    pub fn name(self) -> &'static str {
+        match self {
+            Fec::None => "none",
+            Fec::Ldpc => "LDPC",
+        }
+    }
+}
+
+/// The IEEE 802.3 FEC for a BASE-T port at `mbps` (the stormnic contract,
+/// #5: the driver applies the standard itself, nothing is handed down).
+/// Every port of this family is twisted-pair copper, whose FEC is part of
+/// the PHY's PCS: none at 1000 Mb/s and below, LDPC at 2.5G and 5G. The
+/// MAC has no FEC block, so there is nothing to set; this is what runs.
+pub fn standard_fec(mbps: u32) -> Fec {
+    if mbps >= 2500 { Fec::Ldpc } else { Fec::None }
+}
+
+/// The 802.3 name of the BASE-T media at `mbps`; "copper" without link.
+pub fn media(mbps: u32) -> &'static str {
+    match mbps {
+        5000 => "5GBASE-T",
+        2500 => "2.5GBASE-T",
+        1000 => "1000BASE-T",
+        100 => "100BASE-TX",
+        10 => "10BASE-T",
+        _ => "copper",
+    }
+}
+
+/// The one line a port reports at bind: driver, PCI address, PCI ID, chip,
+/// MAC address, media, speed, FEC and link. A port whose link did not come
+/// up is an `error:` line, never a quiet one.
+pub struct PortLine<'a, A: core::fmt::Display> {
+    pub version: &'a str,
+    pub at: A,
+    pub device: u16,
+    pub chip: Chip,
+    pub mac: [u8; 6],
+    pub link: Link,
+    /// How long Start waited for the link, for the error line.
+    pub waited_ms: u32,
+}
+
+impl<A: core::fmt::Display> core::fmt::Display for PortLine<'_, A> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let m = self.mac;
+        write!(
+            f,
+            "stormnic-realtek {}: {} 10ec:{:04x} {}: MAC {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}, ",
+            self.version, self.at, self.device, self.chip, m[0], m[1], m[2], m[3], m[4], m[5]
+        )?;
+        let l = self.link;
+        if l.up {
+            write!(
+                f,
+                "media {}, speed {} Mb/s {}, FEC {}, link UP",
+                media(l.mbps), l.mbps,
+                if l.full_duplex { "full duplex" } else { "half duplex" },
+                standard_fec(l.mbps).name()
+            )
+        } else {
+            write!(f, "media {}, speed none, FEC {}, link DOWN: error: no link", media(0), Fec::None.name())?;
+            match self.waited_ms {
+                0 => f.write_str(" (down before the MAC reset too; check the cable and the link partner)"),
+                ms => write!(f, " after {ms} ms of autonegotiation (check the cable and the link partner)"),
+            }
+        }
+    }
+}
+
 /// What `identify` reads without changing anything.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Identity {
