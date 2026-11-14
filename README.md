@@ -10,7 +10,7 @@ target is the 2.5GbE on the Radxa Orion O6N (CIX P1, arm64; stormcos#665).
 Hardware facts from OpenBSD's rge(4) (ISC, see NOTICE and
 docs/hardware.md), the binding and SNP from the UEFI specification. MIT.
 
-Status: v0.1.0, verified against a simulated chip only. No emulator has an
+Status: v0.2.0, verified against a simulated chip only. No emulator has an
 RTL8125, so the first real run is the O6N (#2).
 
 ## What it binds

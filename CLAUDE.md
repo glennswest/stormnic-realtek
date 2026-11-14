@@ -60,7 +60,7 @@ sc-build scripts/test-host.sh        # simulated-chip tests
 
 ## Version
 
-`Cargo.toml` → `package.version`. Current: `v0.1.0`.
+`Cargo.toml` → `package.version`. Current: `v0.2.0`.
 
 ## Work plan
 
@@ -76,14 +76,19 @@ sc-build scripts/test-host.sh        # simulated-chip tests
         #2 is proposed after it
   - [ ] On the O6N (owner's hands; not a registered test machine yet):
         `lspci -nn` confirms 10ec:8125 or 8126; the stormbootx-arm64 boot
-        shows `stormnic-realtek 0.1.0: … RTL8125…: MAC …, link up … flow
-        control off, SNP installed`, a DHCP lease and an NVMe/TCP claim; no
+        shows `stormnic-realtek 0.2.0: … RTL8125…: MAC …, media 2.5GBASE-T,
+        speed 2500 Mb/s full duplex, FEC LDPC, link UP` (#5), a DHCP lease and an NVMe/TCP claim; no
         pause frames on the switch port while it sits in stormbootx
 - [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
       with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
       none at 10/100/1000, the PHY's own LDPC at 2.5G/5G, nothing to
       configure) and link; link down is an `error:` line. Same form as
-      stormnic-igb b065f80. In progress 2026-11-13.
+      stormnic-igb b065f80.
+  - [x] Code, tests, docs (306ab04); sc-build 2026-11-13 at 306ab04:
+        test-host.sh 39 tests pass, check-driver.sh both targets clean;
+        v0.2.0 tagged
+  - [ ] Seen on the O6N with #2 (the only RTL8125 machine; no emulator):
+        the per-port line with link UP; proposed after #2
 - [ ] #1 the whole family, pinned in stormbootx's nic-drivers (P3)
   - [x] RTL8125/8126: written under #2 (fdd6d60)
   - [x] RTL8111/8168 split off to #4 (P3, paused until a machine with that

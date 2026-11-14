@@ -2,8 +2,10 @@
 
 ## [Unreleased]
 
-### 2026-11-13
-- **feat:** the stormnic contract (#5): the driver owns its port's bring-up
+## [v0.2.0] — 2026-11-13
+
+### Added
+- the stormnic contract (#5): the driver owns its port's bring-up
   (advertisement, autonegotiation, link; the IEEE 802.3 FEC for the media
   and speed, `rtl::standard_fec`: none to 1000BASE-T, the PHY's own LDPC at
   2.5GBASE-T/5GBASE-T, nothing to configure) and prints one line per port:
