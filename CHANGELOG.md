@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-14
+- **docs:** refreshed README/docs/CLAUDE.md against the code since 2026-11-07 (#5 per-port line, `rtl::standard_fec`/`media`/`PortLine`, error line wording, v0.2.0, 39 host tests): all claims match; no unmet promises, so no issues filed. Remaining open items (#2, #1, #5 on-hardware proof) need the O6N.
+
 ## [v0.2.0] — 2026-11-13
 
 ### Added
