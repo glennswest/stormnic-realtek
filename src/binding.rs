@@ -341,11 +341,11 @@ impl RealtekDriver {
         );
         let (dma, net, link, waited_ms) = match dma_up(&pci, bar, &at, dev, &id) {
             Ok(r) => r,
-            Err(Dma::Released) => {
+            Err(Region::Released) => {
                 restore(&pci, &attributes);
                 return Err(Status::DEVICE_ERROR.into());
             }
-            Err(Dma::Kept) => {
+            Err(Region::Kept) => {
                 restore_master_off(&pci, &attributes, &at);
                 return Err(Status::DEVICE_ERROR.into());
             }
@@ -427,14 +427,14 @@ impl RealtekDriver {
 /// quiesce), in which case bus mastering must stay off when the PCI state is
 /// put back.
 fn dma_up(pci: &PciIo, bar: u8, at: &impl core::fmt::Display, dev: u16, id: &Identity)
-    -> core::result::Result<(DmaRegion, Net, Link, u32), Dma> {
+    -> core::result::Result<(DmaRegion, Net, Link, u32), Region> {
     let mut bars = Bars { pci, bar };
     let region = match DmaRegion::new(pci) {
         Ok(r) => r,
         Err(e) => {
             fail!("stormnic-realtek: {at} 10ec:{dev:04x}: DMA region not mapped: {:?}; releasing", e.status());
             let _ = rtl::quiesce(&mut bars, id.chip);
-            return Err(Dma::Released);
+            return Err(Region::Released);
         }
     };
     // SAFETY: the region is DMA_BYTES (rounded to pages) from AllocateBuffer,
@@ -450,13 +450,13 @@ fn dma_up(pci: &PciIo, bar: u8, at: &impl core::fmt::Display, dev: u16, id: &Ide
             Err(_) => {
                 region.release(pci);
                 say!("stormnic-realtek: {at} 10ec:{dev:04x}: NIC quiesced, DMA region released; releasing");
-                Err(Dma::Released)
+                Err(Region::Released)
             }
         },
         Err(e) => {
             fail!("stormnic-realtek: {at} 10ec:{dev:04x}: quiesce failed: {}", rtl_error(&e));
             keep_dma(pci, at);
-            Err(Dma::Kept)
+            Err(Region::Kept)
         }
     }
 }
@@ -508,7 +508,7 @@ fn keep_dma(pci: &PciIo, at: &impl core::fmt::Display) {
 }
 
 /// What became of the DMA region when Start failed in `dma_up`.
-enum Dma {
+enum Region {
     /// The NIC quiesced (or never ran) and the region is gone.
     Released,
     /// The NIC would not quiesce: the region is kept, bus mastering is off
