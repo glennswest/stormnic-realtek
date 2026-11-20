@@ -88,6 +88,8 @@ sc-build scripts/test-host.sh        # simulated-chip tests
       (a902f1c, 5b8158e, e3bd0de). sc-build 2026-11-20: test-host.sh at
       e3bd0de 44 tests pass; check-driver.sh at 5b8158e x86_64 61,952 B,
       aarch64 58,368 B, PE32+ subsystem 11, clippy clean
+- [x] #9 the same finding re-filed (6025a824371b): already fixed by #6 at
+      main (source = e3bd0de, sc-build verified there); no code change
   - Next: the review's five majors (stormcentral Findings) as P1
 - [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
       with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
