@@ -111,7 +111,12 @@ fn a_kept_dma_region_never_gets_bus_mastering_back() {
         stop_bus_master(&f).unwrap();
         release_master_off(&f, &e).unwrap();
         assert!(!f.bme(), "BME back on; attributes broken: {}, command {:#06x}", f.attributes_broken, f.command.get());
-        assert_eq!(f.attributes.get() & ATTRIBUTE_BUS_MASTER, 0);
+        // The PciIo attributes say so too where the firmware's attribute
+        // calls work (where they answer UNSUPPORTED, the command register
+        // above is the only state there is).
+        if !f.attributes_broken {
+            assert_eq!(f.attributes.get() & ATTRIBUTE_BUS_MASTER, 0);
+        }
         assert_eq!(f.mse(), mse, "memory decode put back as found");
     }
 }
