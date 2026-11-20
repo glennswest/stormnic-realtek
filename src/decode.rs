@@ -127,6 +127,34 @@ pub fn release<P: Pci>(pci: &P, e: &Enabled<P::Status>) -> Result<(), P::Status>
     r
 }
 
+/// `release` for a NIC that would not quiesce (its DMA region is kept): the
+/// function is put back as `enable` found it except that bus mastering is
+/// never turned back on, whatever the firmware had; memory decode is
+/// restored. `stop_bus_master` runs last, so the result is Ok only if BME
+/// reads back clear (review finding 6025a824371b, #6).
+pub fn release_master_off<P: Pci>(pci: &P, e: &Enabled<P::Status>) -> Result<(), Option<P::Status>> {
+    let mut r = Ok(());
+    if let Some(before) = e.command_before {
+        r = pci.config_read_u16(COMMAND).and_then(|now| {
+            pci.config_write_u16(COMMAND, (now & !COMMAND_WANTED) | (before & COMMAND_MEMORY))
+        }).map_err(Some);
+    }
+    if e.by_attributes != 0 {
+        let a = match e.original {
+            Ok(original) => pci.set(original & !ATTRIBUTE_BUS_MASTER),
+            Err(_) => pci.disable(e.by_attributes),
+        };
+        if r.is_ok() {
+            r = a.map_err(Some);
+        }
+    }
+    let off = stop_bus_master(pci);
+    if r.is_ok() {
+        r = off;
+    }
+    r
+}
+
 /// Turn bus mastering off (a NIC whose queues would not stop): `Disable`,
 /// and BME cleared in the command register whatever that returned.
 /// Ok if BME reads back clear.

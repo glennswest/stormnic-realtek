@@ -59,7 +59,9 @@ Shutdown/Stop, binding Stop, ExitBootServices):
 
 If the reset never completes, Start or Stop turns bus mastering off at the
 PCI level and leaves the DMA pages allocated, so the chip can never write
-memory someone else owns.
+memory someone else owns. Bus mastering stays off when the PCI state is put
+back afterwards: memory decode is restored as found, bus mastering is not,
+whatever the firmware had (#6).
 
 Taking the MAC from the management firmware ("exit OOB"): MAC OCP 0xc0bc =
 0x00ff (RealWoW off), reset, MCUCMD bit 7 cleared, MAC OCP 0xe8de bit 14

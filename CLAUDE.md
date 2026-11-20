@@ -32,7 +32,9 @@ scratch files go in `tmp/`.
 - **The NIC is quiet whenever nobody drives it**: RX/TX disabled, MAC reset,
   interrupts masked, at every Start failure, SNP Shutdown/Stop, binding Stop
   and ExitBootServices. Start leaves it reset; only SNP Initialize enables RX
-  and TX. A reset that does not complete turns bus mastering off.
+  and TX. A reset that does not complete turns bus mastering off, and it
+  stays off when the PCI state is put back (`decode::release_master_off`,
+  #6).
 - **Arm:** DMA memory comes from PciIo AllocateBuffer + Map(CommonBuffer),
   so a non-coherent platform gets uncached memory; descriptor writes are
   ordered with `dmb oshst` before the OWN bit, `dmb oshld` after reading it,
@@ -79,6 +81,11 @@ sc-build scripts/test-host.sh        # simulated-chip tests
         shows `stormnic-realtek 0.2.0: … RTL8125…: MAC …, media 2.5GBASE-T,
         speed 2500 Mb/s full duplex, FEC LDPC, link UP` (#5), a DHCP lease and an NVMe/TCP claim; no
         pause frames on the switch port while it sits in stormbootx
+- [ ] #6 review finding 6025a824371b (P0): after a quiesce failure,
+      `restore` put the firmware's bus mastering back on with the DMA region
+      kept. Fix: `decode::release_master_off` on the three kept-DMA paths
+      (dma_up, SNP create in use, binding Stop); host test `test/decode.rs`
+  - [ ] sc-build scripts/test-host.sh and scripts/check-driver.sh
 - [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
       with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
       none at 10/100/1000, the PHY's own LDPC at 2.5G/5G, nothing to

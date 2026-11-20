@@ -56,7 +56,9 @@ the NIC from it with `prefer_media_drivers = realtek` (stormbootx#172).
   ExitBootServices event — in every SNP state, so a chip an earlier stage
   left running stops too. RX and TX are on only between SNP Initialize and
   Shutdown. A reset that does not complete turns bus mastering off and
-  keeps the DMA pages allocated.
+  keeps the DMA pages allocated; when the driver then lets go of the
+  function, memory decode goes back as it found it but bus mastering stays
+  off, even if the firmware had it on (#6).
 - **Rings**: 32 receive descriptors (32-byte format) and 32 transmit
   descriptors (16 bytes), one 2 KiB buffer each; polled, no interrupts.
   Frames are copied in and out of the driver's own buffers, so no caller

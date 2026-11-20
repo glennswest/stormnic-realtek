@@ -341,8 +341,12 @@ impl RealtekDriver {
         );
         let (dma, net, link, waited_ms) = match dma_up(&pci, bar, &at, dev, &id) {
             Ok(r) => r,
-            Err(()) => {
+            Err(Dma::Released) => {
                 restore(&pci, &attributes);
+                return Err(Status::DEVICE_ERROR.into());
+            }
+            Err(Dma::Kept) => {
+                restore_master_off(&pci, &attributes, &at);
                 return Err(Status::DEVICE_ERROR.into());
             }
         };
@@ -352,10 +356,11 @@ impl RealtekDriver {
                 fail!("stormnic-realtek: {at} 10ec:{dev:04x}: SNP not installed: {status:?}; releasing");
                 if in_use {
                     keep_dma(&pci, &at);
+                    restore_master_off(&pci, &attributes, &at);
                 } else {
                     dma.release(&pci);
+                    restore(&pci, &attributes);
                 }
-                restore(&pci, &attributes);
                 return Err(Status::DEVICE_ERROR.into());
             }
         };
@@ -400,10 +405,15 @@ impl RealtekDriver {
         let b = self.bound.swap_remove(i);
         // SAFETY: the child is gone, so nothing else reaches the Port.
         match unsafe { snp::destroy(b.port) } {
-            Ok(()) => b.dma.release(&b.pci),
-            Err(_) => keep_dma(&b.pci, &at(b.location)),
+            Ok(()) => {
+                b.dma.release(&b.pci);
+                restore(&b.pci, &b.decode);
+            }
+            Err(_) => {
+                keep_dma(&b.pci, &at(b.location));
+                restore_master_off(&b.pci, &b.decode, &at(b.location));
+            }
         }
-        restore(&b.pci, &b.decode);
         trace!("stormnic-realtek: {}: Stop: released", at(b.location));
         Ok(())
     }
@@ -412,17 +422,19 @@ impl RealtekDriver {
 /// Map the region, bring the NIC up once (OOB exit, MAC init, the PHY's
 /// advertisement without pause), wait for the link if autonegotiation was
 /// restarted, run the DMA check when the link is up, and quiesce the NIC.
-/// Everything is logged; Err(()) means Start fails (the region is released,
-/// or kept with bus mastering off if the NIC would not quiesce).
+/// Everything is logged; an Err means Start fails, and says whether the
+/// region was released or kept with bus mastering off (the NIC would not
+/// quiesce), in which case bus mastering must stay off when the PCI state is
+/// put back.
 fn dma_up(pci: &PciIo, bar: u8, at: &impl core::fmt::Display, dev: u16, id: &Identity)
-    -> core::result::Result<(DmaRegion, Net, Link, u32), ()> {
+    -> core::result::Result<(DmaRegion, Net, Link, u32), Dma> {
     let mut bars = Bars { pci, bar };
     let region = match DmaRegion::new(pci) {
         Ok(r) => r,
         Err(e) => {
             fail!("stormnic-realtek: {at} 10ec:{dev:04x}: DMA region not mapped: {:?}; releasing", e.status());
             let _ = rtl::quiesce(&mut bars, id.chip);
-            return Err(());
+            return Err(Dma::Released);
         }
     };
     // SAFETY: the region is DMA_BYTES (rounded to pages) from AllocateBuffer,
@@ -438,13 +450,13 @@ fn dma_up(pci: &PciIo, bar: u8, at: &impl core::fmt::Display, dev: u16, id: &Ide
             Err(_) => {
                 region.release(pci);
                 say!("stormnic-realtek: {at} 10ec:{dev:04x}: NIC quiesced, DMA region released; releasing");
-                Err(())
+                Err(Dma::Released)
             }
         },
         Err(e) => {
             fail!("stormnic-realtek: {at} 10ec:{dev:04x}: quiesce failed: {}", rtl_error(&e));
             keep_dma(pci, at);
-            Err(())
+            Err(Dma::Kept)
         }
     }
 }
@@ -493,6 +505,24 @@ fn keep_dma(pci: &PciIo, at: &impl core::fmt::Display) {
         "stormnic-realtek: {at}: could not quiesce the NIC; bus mastering {}, DMA region kept allocated",
         if off.is_ok() { "disabled" } else { "could not be disabled" }
     );
+}
+
+/// What became of the DMA region when Start failed in `dma_up`.
+enum Dma {
+    /// The NIC quiesced (or never ran) and the region is gone.
+    Released,
+    /// The NIC would not quiesce: the region is kept, bus mastering is off
+    /// and must stay off.
+    Kept,
+}
+
+/// `restore` after `keep_dma`: the PCI state goes back as Start found it
+/// except bus mastering, which stays off whatever the firmware had, since the
+/// NIC may still hold descriptors into the kept region (#6).
+fn restore_master_off(pci: &PciIo, e: &Enabled<Status>, at: &impl core::fmt::Display) {
+    if let Err(s) = decode::release_master_off(pci, e) {
+        fail!("stormnic-realtek: {at}: could not put the PCI state back with bus mastering off: {s:?}");
+    }
 }
 
 fn restore(pci: &PciIo, e: &Enabled<Status>) {

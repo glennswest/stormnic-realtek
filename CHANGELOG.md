@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-11-20
+- **fix:** a NIC that would not quiesce got bus mastering back (#6, review finding 6025a824371b): `keep_dma` turned BME off, then `restore` put the firmware's attributes and command register back, BME included, with the DMA region kept and the NIC possibly still holding descriptors into it. The three kept-DMA paths (Start's quiesce failure, SNP install failure with the region in use, binding Stop when the port cannot be destroyed) now use `decode::release_master_off`: memory decode back as found, bus mastering off and read back clear. Host tests for `decode` (`test/decode.rs`, run by `scripts/test-host.sh`).
+
 ### 2026-11-14
 - **docs:** refreshed README/docs/CLAUDE.md against the code since 2026-11-07 (#5 per-port line, `rtl::standard_fec`/`media`/`PortLine`, error line wording, v0.2.0, 39 host tests): all claims match; no unmet promises, so no issues filed. Remaining open items (#2, #1, #5 on-hardware proof) need the O6N.
 
