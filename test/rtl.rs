@@ -267,10 +267,28 @@ fn a_failed_bring_up_leaves_the_chip_quiesced() {
 #[test]
 fn the_dma_check_waits_for_the_descriptor() {
     let (mut d, mut net) = started(Chip::R25B);
-    assert_eq!(ring::check(&mut d, &mut net), Ok(Some(0)));
+    assert_eq!(ring::check(&mut d, &mut net), Ok(0));
     assert_eq!(rtl::ring::frame(&d.wire[0]).ethertype, 0x88b5);
+}
+
+/// Review finding 4d2cf4e1502a (#10): a descriptor that never comes back is
+/// an error (Start fails on it), not a warning, and the chip then quiesces.
+#[test]
+fn a_dma_check_that_times_out_is_an_error_and_the_chip_quiesces() {
+    let (mut d, mut net) = started(Chip::R25B);
     d.tx_stalled = true;
-    assert_eq!(ring::check(&mut d, &mut net), Ok(None));
+    assert_eq!(ring::check(&mut d, &mut net), Err(Error::DmaCheck));
+    assert!(net.stop(&mut d).is_ok());
+    assert!(!d.tx_enabled && !d.rx_enabled && !net.running);
+}
+
+/// A ring that will not take the check frame fails the check too.
+#[test]
+fn a_dma_check_with_a_full_ring_is_an_error() {
+    let (mut d, mut net) = started(Chip::R25B);
+    d.tx_stalled = true;
+    while net.transmit(&mut d, &ring::check_frame(MAC)).unwrap() {}
+    assert_eq!(ring::check(&mut d, &mut net), Err(Error::DmaCheck));
 }
 
 #[test]

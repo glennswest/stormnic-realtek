@@ -13,9 +13,11 @@
 //! identifies the chip (`rtl::identify`), maps one DMA region, brings the
 //! NIC up once (which takes it from the management firmware and makes the
 //! PHY advertise without pause, #2), runs the DMA check when the link is up
-//! and quiesces it again. Last it makes the SNP child handle (`snp`): nothing
+//! and quiesces it again; a DMA check whose descriptor does not come back
+//! fails Start (#10). Last it makes the SNP child handle (`snp`): nothing
 //! DMAs until the SNP's user initializes it. Every failure after the chip is
-//! identified quiesces it before Start returns.
+//! identified quiesces it before Start returns. The DMA region is freed only
+//! after its Unmap succeeded (`dma`, #10).
 //!
 //! Every Realtek network function Supported sees is logged (trace), matched
 //! or not, so a verbose boot names what the machine really has.
@@ -33,6 +35,7 @@ use uefi_raw::protocol::driver::DriverBindingProtocol;
 
 use crate::console;
 use crate::decode::{self, Enabled};
+use crate::dma;
 use crate::ids::{self, Nic};
 use crate::pci_io::{Location, PciIo, Width};
 use crate::rtl::ring::{self, Dma, Net};
@@ -118,18 +121,44 @@ impl DmaRegion {
         }
     }
 
-    /// Unmap and free. Only once the NIC is quiesced.
+    /// Unmap, then free only if Unmap worked (`dma::release`; review
+    /// finding cbfb1142d3f0, #10). Only once the NIC is quiesced.
     fn release(self, pci: &PciIo) {
-        // SAFETY: the caller quiesced the NIC, so it no longer reads or
-        // writes the region; nothing else holds the pointer after this.
-        unsafe {
-            if let Err(e) = pci.unmap(self.mapping) {
-                say!("stormnic-realtek: could not unmap the DMA region: {:?}", e.status());
+        let mut giving = Giving { pci, region: self };
+        match dma::release(&mut giving) {
+            dma::Released::Freed => {}
+            dma::Released::NotFreed(s) => {
+                fail!("stormnic-realtek: DMA region unmapped but FreeBuffer failed: {s:?}; {} pages stay allocated until reboot", ring::DMA_PAGES);
             }
-            if let Err(e) = pci.free_buffer(ring::DMA_PAGES, self.host) {
-                say!("stormnic-realtek: could not free the DMA region: {:?}", e.status());
+            dma::Released::Kept(s) => {
+                fail!(
+                    "stormnic-realtek: could not unmap the DMA region: {s:?}; not freed, {} pages at device {:#x} stay allocated and mapped until reboot",
+                    ring::DMA_PAGES, giving.region.device
+                );
             }
         }
+    }
+}
+
+/// A quiesced NIC's region on its way back to the firmware (`dma::Mapped`).
+struct Giving<'a> {
+    pci: &'a PciIo,
+    region: DmaRegion,
+}
+
+impl dma::Mapped for Giving<'_> {
+    type Status = Status;
+    fn unmap(&mut self) -> core::result::Result<(), Status> {
+        // SAFETY: the caller of `release` quiesced the NIC, so it no longer
+        // uses the mapping; `release` consumed the region, so it is unmapped
+        // once.
+        unsafe { self.pci.unmap(self.region.mapping) }.map_err(|e| e.status())
+    }
+    fn free(&mut self) -> core::result::Result<(), Status> {
+        // SAFETY: `dma::release` calls this only after Unmap succeeded; the
+        // pages came from AllocateBuffer(DMA_PAGES) and nothing else holds
+        // the pointer.
+        unsafe { self.pci.free_buffer(ring::DMA_PAGES, self.region.host) }.map_err(|e| e.status())
     }
 }
 
@@ -251,6 +280,9 @@ fn rtl_error(e: &rtl::Error<Status>) -> impl core::fmt::Display + '_ {
                 rtl::Error::ResetTimeout { cmd } => write!(f, "MAC reset did not complete (CMD {cmd:#04x})"),
                 rtl::Error::PhyTimeout { reg } => write!(f, "PHY OCP access to {reg:#06x} timed out"),
                 rtl::Error::Frame { len } => write!(f, "bad frame length {len}"),
+                rtl::Error::DmaCheck => f.write_str(
+                    "DMA check: the NIC did not return the frame's descriptor within 100 ms (DMA to the mapped region or the transmitter does not work)"
+                ),
             }
         }
     }
@@ -486,10 +518,12 @@ fn bring_up(bars: &mut Bars, net: &mut Net, chip: Chip, at: &impl core::fmt::Dis
         say!("stormnic-realtek: {at} 10ec:{dev:04x}: warning: the link resolved to TX pause although none is advertised");
     }
     if link.up {
-        match ring::check(bars, net)? {
-            Some(ms) => trace!("stormnic-realtek: {at} 10ec:{dev:04x}: DMA check: broadcast frame sent, descriptor back after {ms} ms"),
-            None => say!("stormnic-realtek: {at} 10ec:{dev:04x}: DMA check: the NIC did not return the frame's descriptor within 100 ms"),
-        }
+        // A timeout is an Err: dma_up quiesces the NIC, releases the region
+        // and Start fails with DEVICE_ERROR, so no SNP is installed on a NIC
+        // whose DMA does not work; nothing is kept, so a later
+        // ConnectController tries again (review finding 4d2cf4e1502a, #10).
+        let ms = ring::check(bars, net)?;
+        trace!("stormnic-realtek: {at} 10ec:{dev:04x}: DMA check: broadcast frame sent, descriptor back after {ms} ms");
     } else {
         trace!("stormnic-realtek: {at} 10ec:{dev:04x}: DMA check skipped: link down");
     }

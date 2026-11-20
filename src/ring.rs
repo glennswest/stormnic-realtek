@@ -293,13 +293,15 @@ pub fn check_frame(mac: [u8; 6]) -> [u8; 60] {
 
 /// Send the check frame and wait up to 100 ms for the chip to clear its
 /// OWN bit: it fetched the descriptor and the buffer and wrote the
-/// descriptor back, so DMA works both ways. Ok(Some(ms)) when it did.
-pub fn check<B: Bus>(b: &mut B, net: &mut Net) -> R<Option<usize>, B::Error> {
-    if !net.transmit(b, &check_frame(net.mac))? { return Ok(None); }
+/// descriptor back, so DMA works both ways. Ok(ms) when it did;
+/// `Error::DmaCheck` when it did not (or the ring would not take the frame),
+/// which fails Start (review finding 4d2cf4e1502a, #10).
+pub fn check<B: Bus>(b: &mut B, net: &mut Net) -> R<usize, B::Error> {
+    if !net.transmit(b, &check_frame(net.mac))? { return Err(Error::DmaCheck); }
     for ms in 0..=100 {
         net.reclaim();
-        if net.tx_pending() == 0 { return Ok(Some(ms)); }
+        if net.tx_pending() == 0 { return Ok(ms); }
         b.delay_us(1000);
     }
-    Ok(None)
+    Err(Error::DmaCheck)
 }

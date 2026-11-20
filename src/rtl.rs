@@ -225,6 +225,10 @@ pub enum Error<E> {
     PhyTimeout { reg: u16 },
     /// A frame outside 14..=1518 bytes to send.
     Frame { len: usize },
+    /// The DMA check's descriptor did not come back within 100 ms: the NIC
+    /// cannot read or write the mapped region, or its transmitter is dead
+    /// (review finding 4d2cf4e1502a, #10).
+    DmaCheck,
 }
 
 impl<E> From<E> for Error<E> {

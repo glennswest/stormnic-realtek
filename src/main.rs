@@ -19,6 +19,7 @@ extern crate alloc;
 mod console;
 mod binding;
 mod decode;
+mod dma;
 mod ids;
 mod pci_io;
 mod rtl;

@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out="${CARGO_TARGET_DIR:-target}/host-tests"
 mkdir -p "$out"
-for t in rtl snp trace decode; do
+for t in rtl snp trace decode dma; do
     rustc --edition=2021 -D warnings --test "test/$t.rs" -o "$out/$t-tests"
     "$out/$t-tests"
 done

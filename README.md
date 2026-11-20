@@ -40,8 +40,14 @@ the NIC from it with `prefer_media_drivers = realtek` (stormbootx#172).
   firmware) mode, MAC reset, the revision's MAC init, the PHY's
   advertisement corrected (below). If the link is up, a DMA check sends one
   broadcast frame (EtherType 0x88B5, `stormnic-realtek DMA check`) and waits
-  for its descriptor to come back. Then the NIC is **quiesced** and the SNP
-  goes on a child handle with the controller's device path plus a MAC node.
+  for its descriptor to come back; if it does not within 100 ms, Start
+  fails (the NIC is quiesced, the region released, `DEVICE_ERROR`, nothing
+  kept, so a later `ConnectController` tries again) rather than install an
+  SNP on a NIC whose DMA does not work (#10). Then the NIC is **quiesced**
+  and the SNP goes on a child handle with the controller's device path plus
+  a MAC node. The region is given back (`src/dma.rs`) with `Unmap` and then
+  `FreeBuffer`, only if `Unmap` succeeded; a failed `Unmap` keeps the pages
+  allocated and mapped until reboot and says so on the console (#10).
 - **Flow control off** (#2): the PHY advertises every speed the chip has
   (10/100/1000, 2.5G, and 5G on the RTL8126) and **no 802.3x pause**, so
   the link resolves to no flow control. A NIC whose ring nobody empties
