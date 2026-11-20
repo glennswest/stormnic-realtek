@@ -91,6 +91,12 @@ sc-build scripts/test-host.sh        # simulated-chip tests
 - [x] #9 the same finding re-filed (6025a824371b): already fixed by #6 at
       main (source = e3bd0de, sc-build verified there); no code change
   - Next: the review's five majors (stormcentral Findings) as P1
+- [ ] #10 review (P1), two majors in src/binding.rs:
+  - [ ] 4d2cf4e1502a: a DMA check that times out fails Start
+        (`rtl::Error::DmaCheck` from `ring::check`; quiesce, release,
+        DEVICE_ERROR; a later ConnectController can retry); test/rtl.rs
+  - [ ] cbfb1142d3f0: FreeBuffer only after Unmap succeeded; an Unmap
+        failure keeps the allocation and says so (`src/dma.rs`, test/dma.rs)
 - [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
       with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
       none at 10/100/1000, the PHY's own LDPC at 2.5G/5G, nothing to
