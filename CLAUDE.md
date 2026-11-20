@@ -81,11 +81,14 @@ sc-build scripts/test-host.sh        # simulated-chip tests
         shows `stormnic-realtek 0.2.0: … RTL8125…: MAC …, media 2.5GBASE-T,
         speed 2500 Mb/s full duplex, FEC LDPC, link UP` (#5), a DHCP lease and an NVMe/TCP claim; no
         pause frames on the switch port while it sits in stormbootx
-- [ ] #6 review finding 6025a824371b (P0): after a quiesce failure,
+- [x] #6 review finding 6025a824371b (P0): after a quiesce failure,
       `restore` put the firmware's bus mastering back on with the DMA region
       kept. Fix: `decode::release_master_off` on the three kept-DMA paths
       (dma_up, SNP create in use, binding Stop); host test `test/decode.rs`
-  - [ ] sc-build scripts/test-host.sh and scripts/check-driver.sh
+      (a902f1c, 5b8158e, e3bd0de). sc-build 2026-11-20: test-host.sh at
+      e3bd0de 44 tests pass; check-driver.sh at 5b8158e x86_64 61,952 B,
+      aarch64 58,368 B, PE32+ subsystem 11, clippy clean
+  - Next: the review's five majors (stormcentral Findings) as P1
 - [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
       with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
       none at 10/100/1000, the PHY's own LDPC at 2.5G/5G, nothing to
