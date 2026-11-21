@@ -12,7 +12,20 @@
 //! Mode says it is not changeable, and StationAddress takes only it.
 //!
 //! The NIC runs only between Initialize and Shutdown/Stop (or halt, at
-//! ExitBootServices): every other state has it quiesced (#2).
+//! ExitBootServices): every other state has it quiesced (#2). Every failure
+//! after the NIC was started (advertisement, link read) quiesces it again
+//! and leaves the interface Started (review findings a02063c26ea9,
+//! e1f05b9e82f7, #11). A quiesce that fails marks the interface `wedged`:
+//! `src/snp.rs` then turns bus mastering off, and Initialize and Reset are
+//! refused (`Fail::Wedged`) for the life of this Snp (the binding's Stop and
+//! a new Start make a new one).
+//!
+//! Transmit tokens belong to one run: Initialize, Reset, Shutdown, Stop and
+//! halt drop the tokens not yet handed back and the TRANSMIT interrupt bit,
+//! so GetStatus never returns a buffer from an earlier run (review finding
+//! aea66f5ba24a, #11). The buffers were copied at Transmit, so the caller
+//! owned them from the start; a frame discarded by the reset is simply lost,
+//! as on the wire.
 //!
 //! Transmit copies the frame into a ring buffer, so the caller's buffer is
 //! free at once; it is queued for GetStatus to hand back, as the spec asks.
@@ -63,6 +76,9 @@ pub enum Fail<E> {
     NotReady,
     /// EFI_DEVICE_ERROR: the chip failed.
     Device(Error<E>),
+    /// EFI_DEVICE_ERROR: an earlier quiesce failed, so the NIC may still
+    /// run and its bus mastering is off; it is not brought up again.
+    Wedged,
 }
 
 impl<E> From<Error<E>> for Fail<E> {
@@ -94,6 +110,9 @@ pub struct Snp {
     pub media: bool,
     /// The last link state read.
     pub link: Link,
+    /// A quiesce failed: the NIC may still DMA. The glue turns bus mastering
+    /// off; Initialize and Reset are refused.
+    pub wedged: bool,
     /// A frame went out since the last GetStatus.
     transmitted: bool,
     /// Caller buffers (as addresses) for GetStatus, oldest at `head`.
@@ -120,7 +139,7 @@ impl Snp {
         let mac = net.mac;
         Snp {
             net, pause, state: State::Stopped, permanent: mac, current: mac,
-            setting: 0, mcast: [[0; 6]; MAX_MCAST], mcast_count: 0, media: link.up, link,
+            setting: 0, mcast: [[0; 6]; MAX_MCAST], mcast_count: 0, media: link.up, link, wedged: false,
             transmitted: false, recycle: [0; RECYCLE], head: 0, queued: 0,
         }
     }
@@ -159,9 +178,10 @@ impl Snp {
     pub fn initialize<B: Bus>(&mut self, b: &mut B) -> F<(), B::Error> {
         match self.state {
             State::Stopped => return Err(Fail::NotStarted),
-            State::Initialized => { self.net.stop(b)?; }
+            State::Initialized => self.quiesce(b)?,
             State::Started => {}
         }
+        if self.wedged { return Err(Fail::Wedged); }
         self.setting = 0;
         self.mcast_count = 0;
         self.run(b)?;
@@ -170,38 +190,72 @@ impl Snp {
     }
 
     /// Reset: restart the NIC, keeping the filters and station address.
+    /// On failure the NIC is quiesced and the interface is Started.
     pub fn reset<B: Bus>(&mut self, b: &mut B) -> F<(), B::Error> {
         self.initialized()?;
-        self.net.stop(b)?;
-        self.run(b)
+        self.quiesce(b)?;
+        self.run(b)?;
+        self.state = State::Initialized;
+        Ok(())
     }
 
     /// Shutdown: quiesce the NIC; initialized to started.
     pub fn shutdown<B: Bus>(&mut self, b: &mut B) -> F<(), B::Error> {
         self.initialized()?;
-        self.net.stop(b)?;
+        self.quiesce(b)
+    }
+
+    /// Stop the NIC and end the run: the interface is Started, the transmit
+    /// tokens of the run are dropped. A quiesce that fails marks it wedged.
+    fn quiesce<B: Bus>(&mut self, b: &mut B) -> F<(), B::Error> {
         self.state = State::Started;
-        Ok(())
+        self.forget_transmits();
+        match self.net.stop(b) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                self.wedged = true;
+                Err(e.into())
+            }
+        }
+    }
+
+    /// Drop the transmit tokens not yet handed back, and the TRANSMIT bit.
+    fn forget_transmits(&mut self) {
+        self.head = 0;
+        self.queued = 0;
+        self.transmitted = false;
+    }
+
+    /// A failure after the NIC was started: quiesce it again (marking the
+    /// interface wedged if that fails too) and return the first error.
+    fn abandon<B: Bus>(&mut self, b: &mut B, e: Error<B::Error>) -> Fail<B::Error> {
+        let _ = self.quiesce(b);
+        Fail::Device(e)
     }
 
     /// Bring the NIC up, make sure the PHY advertises what it should (pause
-    /// only with the setting), and read the link.
+    /// only with the setting), and read the link. On any failure the NIC is
+    /// quiesced and the interface is Started (#11).
     fn run<B: Bus>(&mut self, b: &mut B) -> F<(), B::Error> {
+        self.forget_transmits();
         let promiscuous = self.setting & PROMISCUOUS != 0;
         if let Err(e) = self.net.start(b, promiscuous) {
-            // `start` quiesced the chip again; nothing runs.
-            self.state = State::Started;
-            return Err(e.into());
+            // `start` reset the chip already; quiesce once more to know it
+            // stopped (a reset that times out marks the interface wedged).
+            return Err(self.abandon(b, e));
         }
         let readvertised = match super::advertise(b, self.net.chip, self.pause) {
             Ok(r) => r,
-            Err(e) => {
-                let _ = self.net.stop(b);
-                self.state = State::Started;
-                return Err(e.into());
+            Err(e) => return Err(self.abandon(b, e)),
+        };
+        self.link = if readvertised {
+            super::Link::default()
+        } else {
+            match self.net.link(b) {
+                Ok(l) => l,
+                Err(e) => return Err(self.abandon(b, e)),
             }
         };
-        self.link = if readvertised { super::Link::default() } else { self.net.link(b)? };
         self.media = self.link.up;
         Ok(())
     }
@@ -337,6 +391,9 @@ impl Snp {
     /// never initialized, so a chip some earlier stage left running stops.
     pub fn halt<B: Bus>(&mut self, b: &mut B) -> Result<(), Error<B::Error>> {
         self.state = State::Stopped;
-        self.net.stop(b)
+        self.forget_transmits();
+        let r = self.net.stop(b);
+        if r.is_err() { self.wedged = true; }
+        r
     }
 }

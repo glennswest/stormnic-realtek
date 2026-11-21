@@ -104,6 +104,89 @@ fn a_failed_initialize_leaves_it_started_and_quiesced() {
     assert!(!d.rx_enabled && !d.tx_enabled);
 }
 
+/// Review findings a02063c26ea9 and e1f05b9e82f7 (#11): a link read that
+/// fails after the NIC started quiesces it again and leaves it Started, on
+/// Initialize and on Reset.
+#[test]
+fn a_failed_link_read_quiesces_the_nic_and_leaves_it_started() {
+    let (mut d, mut s) = up();
+    d.now += AN_US;
+    s.shutdown(&mut d).unwrap();
+    d.phystat_fails = true;
+    // The advertisement is right now, so Initialize reads the link.
+    assert_eq!(s.initialize(&mut d), Err(Fail::Device(rtl::Error::Io(()))));
+    assert_eq!(s.state, State::Started);
+    assert!(!d.rx_enabled && !d.tx_enabled, "Initialize failed: nothing runs");
+    assert!(!s.wedged);
+    d.phystat_fails = false;
+    s.initialize(&mut d).unwrap();
+    assert!(d.rx_enabled && d.tx_enabled && s.media);
+
+    d.phystat_fails = true;
+    let resets = d.resets;
+    assert_eq!(s.reset(&mut d), Err(Fail::Device(rtl::Error::Io(()))));
+    assert_eq!(s.state, State::Started, "a failed Reset does not keep Initialized");
+    assert!(!d.rx_enabled && !d.tx_enabled);
+    assert!(d.resets >= resets + 2, "stopped, started, and quiesced again");
+    assert_eq!(s.get_status(&mut d, false), Err(Fail::NotInitialized));
+}
+
+/// #11: when the quiesce after a failure fails too, the interface is marked
+/// wedged (the glue turns bus mastering off) and is not brought up again.
+#[test]
+fn a_quiesce_that_fails_after_a_failure_marks_it_wedged() {
+    let (mut d, mut s) = up();
+    d.now += AN_US;
+    d.phystat_fails = true;
+    d.wedge_on_phystat = true;
+    assert_eq!(s.reset(&mut d), Err(Fail::Device(rtl::Error::Io(()))), "the first error is returned");
+    assert!(s.wedged);
+    assert_eq!(s.state, State::Started);
+    d.phystat_fails = false;
+    d.reset_stuck = false;
+    assert_eq!(s.initialize(&mut d), Err(Fail::Wedged));
+    assert!(!d.rx_enabled && !d.tx_enabled, "a wedged interface is not started");
+    assert_eq!(s.reset(&mut d), Err(Fail::NotInitialized));
+}
+
+/// #11: a Shutdown whose quiesce fails leaves it Started and wedged.
+#[test]
+fn a_failed_shutdown_marks_it_wedged() {
+    let (mut d, mut s) = up();
+    d.reset_stuck = true;
+    assert!(matches!(s.shutdown(&mut d), Err(Fail::Device(rtl::Error::ResetTimeout { .. }))));
+    assert!(s.wedged);
+    assert_eq!(s.state, State::Started);
+}
+
+/// Review finding aea66f5ba24a (#11): GetStatus never hands back a token
+/// from an earlier run, after Shutdown + Initialize, Reset, or Stop.
+#[test]
+fn transmit_tokens_do_not_outlive_their_run() {
+    let (mut d, mut s) = up();
+    d.now += AN_US;
+    let mut f = frame_to(OTHER, 1);
+    s.transmit(&mut d, 0, &mut f, None, None, None, 0x1000).unwrap();
+    s.shutdown(&mut d).unwrap();
+    s.initialize(&mut d).unwrap();
+    assert_eq!(s.get_status(&mut d, true).unwrap(), (0, None), "after Shutdown + Initialize");
+
+    s.transmit(&mut d, 0, &mut f, None, None, None, 0x2000).unwrap();
+    s.reset(&mut d).unwrap();
+    assert_eq!(s.get_status(&mut d, true).unwrap(), (0, None), "after Reset");
+
+    s.transmit(&mut d, 0, &mut f, None, None, None, 0x3000).unwrap();
+    s.stop(&mut d).unwrap();
+    s.start::<()>().unwrap();
+    s.initialize(&mut d).unwrap();
+    assert_eq!(s.get_status(&mut d, true).unwrap(), (0, None), "after Stop + Start + Initialize");
+
+    // The new run's own tokens still come back.
+    s.transmit(&mut d, 0, &mut f, None, None, None, 0x4000).unwrap();
+    let (bits, t) = s.get_status(&mut d, true).unwrap();
+    assert_eq!((bits & snp::TRANSMIT_INTERRUPT, t), (snp::TRANSMIT_INTERRUPT, Some(0x4000)));
+}
+
 #[test]
 fn frames_are_filtered_by_the_setting() {
     let (mut d, mut s) = up();

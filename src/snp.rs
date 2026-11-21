@@ -65,6 +65,8 @@ pub struct Port {
     busy: bool,
     /// For the console.
     location: Option<Location>,
+    /// Bus mastering was turned off because the core is wedged (#11).
+    master_off: bool,
 }
 
 /// The controller's device path with a MAC node (messaging 3, subtype 11,
@@ -98,7 +100,7 @@ fn status<E>(f: &Fail<E>) -> Status {
     match f {
         Fail::NotStarted => Status::NOT_STARTED,
         Fail::AlreadyStarted => Status::ALREADY_STARTED,
-        Fail::NotInitialized | Fail::Device(_) => Status::DEVICE_ERROR,
+        Fail::NotInitialized | Fail::Device(_) | Fail::Wedged => Status::DEVICE_ERROR,
         Fail::InvalidParameter => Status::INVALID_PARAMETER,
         Fail::Unsupported => Status::UNSUPPORTED,
         Fail::BufferTooSmall(_) => Status::BUFFER_TOO_SMALL,
@@ -158,10 +160,23 @@ impl Port {
         Bars { pci: unsafe { &*self.pci }, bar: self.bar }
     }
 
-    fn log_fail<E: core::fmt::Debug>(&self, call: &str, f: &Fail<E>) {
-        if let Fail::Device(e) = f {
-            say!("stormnic-realtek: {}: SNP {call} failed: {e:x?}", at(self.location));
+    /// A failed call: say why, and when the core could not quiesce the NIC
+    /// (it may still DMA), turn bus mastering off once (#11, as binding.rs
+    /// does for a NIC that would not quiesce). Returns the call's status.
+    fn failed<E: core::fmt::Debug>(&mut self, call: &str, f: &Fail<E>) -> Status {
+        match f {
+            Fail::Device(e) => say!("stormnic-realtek: {}: SNP {call} failed: {e:x?}", at(self.location)),
+            Fail::Wedged => say!(
+                "stormnic-realtek: {}: SNP {call} refused: the NIC would not quiesce earlier", at(self.location)
+            ),
+            _ => {}
         }
+        if self.core.wedged && !self.master_off {
+            self.master_off = true;
+            // SAFETY: as `io`.
+            crate::binding::keep_dma(unsafe { &*self.pci }, &at(self.location));
+        }
+        status(f)
     }
 }
 
@@ -180,7 +195,7 @@ unsafe extern "efiapi" fn stop(this: *const SimpleNetworkProtocol) -> Status {
     let mut io = c.port.io();
     match c.port.core.stop(&mut io) {
         Ok(()) => Status::SUCCESS,
-        Err(f) => { c.port.log_fail("Stop", &f); status(&f) }
+        Err(f) => c.port.failed("Stop", &f),
     }
 }
 
@@ -195,7 +210,7 @@ unsafe extern "efiapi" fn initialize(this: *const SimpleNetworkProtocol, _extra_
             );
             Status::SUCCESS
         }
-        Err(f) => { c.port.log_fail("Initialize", &f); status(&f) }
+        Err(f) => c.port.failed("Initialize", &f),
     }
 }
 
@@ -204,7 +219,7 @@ unsafe extern "efiapi" fn reset(this: *const SimpleNetworkProtocol, _extended: B
     let mut io = c.port.io();
     match c.port.core.reset(&mut io) {
         Ok(()) => Status::SUCCESS,
-        Err(f) => { c.port.log_fail("Reset", &f); status(&f) }
+        Err(f) => c.port.failed("Reset", &f),
     }
 }
 
@@ -213,7 +228,7 @@ unsafe extern "efiapi" fn shutdown(this: *const SimpleNetworkProtocol) -> Status
     let mut io = c.port.io();
     match c.port.core.shutdown(&mut io) {
         Ok(()) => { trace!("stormnic-realtek: {}: SNP shut down", at(c.port.location)); Status::SUCCESS }
-        Err(f) => { c.port.log_fail("Shutdown", &f); status(&f) }
+        Err(f) => c.port.failed("Shutdown", &f),
     }
 }
 
@@ -240,7 +255,7 @@ unsafe extern "efiapi" fn receive_filters(this: *const SimpleNetworkProtocol, en
             }
             Status::SUCCESS
         }
-        Err(f) => { c.port.log_fail("ReceiveFilters", &f); status(&f) }
+        Err(f) => c.port.failed("ReceiveFilters", &f),
     }
 }
 
@@ -254,7 +269,7 @@ unsafe extern "efiapi" fn station_address(this: *const SimpleNetworkProtocol, re
             trace!("stormnic-realtek: {}: SNP station address {}", at(c.port.location), mac_str(c.port.core.current));
             Status::SUCCESS
         }
-        Err(f) => { c.port.log_fail("StationAddress", &f); status(&f) }
+        Err(f) => c.port.failed("StationAddress", &f),
     }
 }
 
@@ -297,7 +312,7 @@ unsafe extern "efiapi" fn get_status(this: *const SimpleNetworkProtocol, interru
             }
             Status::SUCCESS
         }
-        Err(f) => { c.port.log_fail("GetStatus", &f); status(&f) }
+        Err(f) => c.port.failed("GetStatus", &f),
     }
 }
 
@@ -316,7 +331,7 @@ unsafe extern "efiapi" fn transmit(this: *const SimpleNetworkProtocol, header_si
     let mut io = c.port.io();
     match c.port.core.transmit(&mut io, header_size, buf, mac(source), mac(destination), protocol, buffer as usize) {
         Ok(()) => Status::SUCCESS,
-        Err(f) => { c.port.log_fail("Transmit", &f); status(&f) }
+        Err(f) => c.port.failed("Transmit", &f),
     }
 }
 
@@ -342,8 +357,7 @@ unsafe extern "efiapi" fn receive(this: *const SimpleNetworkProtocol, header_siz
         Err(f) => {
             // SAFETY: as above; the frame stays queued for a bigger buffer.
             if let Fail::BufferTooSmall(len) = f { unsafe { *size = len; } }
-            c.port.log_fail("Receive", &f);
-            status(&f)
+            c.port.failed("Receive", &f)
         }
     }
 }
@@ -420,6 +434,7 @@ pub fn create(agent: Handle, controller: Handle, pci: &PciIo, bar: u8, net: Net,
         exit: ptr::null_mut(),
         busy: false,
         location,
+        master_off: false,
     }));
     // SAFETY: `port` is live until `destroy`, which undoes each step below.
     unsafe {

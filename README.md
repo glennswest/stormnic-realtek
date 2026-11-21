@@ -77,6 +77,12 @@ the NIC from it with `prefer_media_drivers = realtek` (stormbootx#172).
   the SNP's receive filters are applied in software. The station address
   is the chip's own (`MacAddressChangeable` FALSE). Statistics and NvData:
   `EFI_UNSUPPORTED`.
+  A failure after the NIC was started (advertisement, link read) quiesces
+  it again and leaves the interface Started; if that quiesce fails too, bus
+  mastering is turned off and Initialize/Reset return `EFI_DEVICE_ERROR`
+  until the controller is stopped and started again (#11). Transmit tokens
+  belong to one run: Initialize, Reset, Shutdown and Stop drop the ones
+  GetStatus has not handed back yet (the frames were copied at Transmit).
 
 ## Console
 

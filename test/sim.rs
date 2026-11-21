@@ -41,6 +41,10 @@ pub struct Dev {
     pub reset_stuck: bool,
     /// PHY OCP accesses never finish.
     pub phy_stuck: bool,
+    /// A PHYSTAT read fails (an I/O error from the bus), and with
+    /// `wedge_on_phystat` the MAC reset sticks from then on (#11).
+    pub phystat_fails: bool,
+    pub wedge_on_phystat: bool,
     /// The doorbell is ignored (a hung transmitter).
     pub tx_stalled: bool,
     tx_idx: usize,
@@ -88,6 +92,8 @@ impl Dev {
             resets: 0,
             reset_stuck: false,
             phy_stuck: false,
+            phystat_fails: false,
+            wedge_on_phystat: false,
             tx_stalled: false,
             tx_idx: 0,
             rx_idx: 0,
@@ -314,7 +320,13 @@ pub fn mii(reg: u16) -> u16 { rtl::PHY_MII_BASE + 2 * reg }
 impl Bus for Dev {
     type Error = ();
     fn r8(&mut self, o: u32) -> Result<u8, ()> { Ok(self.read(o, 1) as u8) }
-    fn r16(&mut self, o: u32) -> Result<u16, ()> { Ok(self.read(o, 2) as u16) }
+    fn r16(&mut self, o: u32) -> Result<u16, ()> {
+        if o == rtl::PHYSTAT && self.phystat_fails {
+            if self.wedge_on_phystat { self.reset_stuck = true; }
+            return Err(());
+        }
+        Ok(self.read(o, 2) as u16)
+    }
     fn r32(&mut self, o: u32) -> Result<u32, ()> { Ok(self.read(o, 4)) }
     fn w8(&mut self, o: u32, v: u8) -> Result<(), ()> { self.write(o, 1, v.into()); Ok(()) }
     fn w16(&mut self, o: u32, v: u16) -> Result<(), ()> { self.write(o, 2, v.into()); Ok(()) }

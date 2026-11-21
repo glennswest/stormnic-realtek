@@ -533,7 +533,7 @@ fn bring_up(bars: &mut Bars, net: &mut Net, chip: Chip, at: &impl core::fmt::Dis
 /// The NIC would not quiesce: it might still DMA into the region, so it is
 /// never freed. Bus mastering is turned off at the PCI level instead; the
 /// pages stay allocated until reboot.
-fn keep_dma(pci: &PciIo, at: &impl core::fmt::Display) {
+pub fn keep_dma(pci: &PciIo, at: &impl core::fmt::Display) {
     let off = decode::stop_bus_master(pci);
     fail!(
         "stormnic-realtek: {at}: could not quiesce the NIC; bus mastering {}, DMA region kept allocated",

@@ -101,6 +101,13 @@ sc-build scripts/test-host.sh        # simulated-chip tests
     check-driver.sh at 68cae70 not run yet: both waited ~2 h in the build
     queue and were stopped locally (low memory on stormcentral) before a
     slot; rerun both, then close #10
+- [ ] #11 review (P1), three majors in src/snp_core.rs:
+  - [ ] a02063c26ea9 / e1f05b9e82f7: a failed link read in `run` quiesces
+        the NIC, state Started; a failed quiesce marks the core `wedged`,
+        the glue turns BME off, Initialize/Reset refused (test/snp.rs)
+  - [ ] aea66f5ba24a: transmit tokens dropped at every lifecycle transition
+  - Code, tests, docs pushed; sc-build of test-host.sh and check-driver.sh
+    next, then close #11
 - [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
       with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
       none at 10/100/1000, the PHY's own LDPC at 2.5G/5G, nothing to
