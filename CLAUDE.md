@@ -97,6 +97,10 @@ sc-build scripts/test-host.sh        # simulated-chip tests
         DEVICE_ERROR; a later ConnectController can retry); test/rtl.rs
   - [ ] cbfb1142d3f0: FreeBuffer only after Unmap succeeded; an Unmap
         failure keeps the allocation and says so (`src/dma.rs`, test/dma.rs)
+  - Code, tests, docs pushed (68cae70). sc-build of test-host.sh and
+    check-driver.sh at 68cae70 not run yet: both waited ~2 h in the build
+    queue and were stopped locally (low memory on stormcentral) before a
+    slot; rerun both, then close #10
 - [ ] #5 the stormnic contract (P2, master 2026-11-14): one line per port
       with driver, PCI address, MAC, media, speed, the standard FEC (BASE-T:
       none at 10/100/1000, the PHY's own LDPC at 2.5G/5G, nothing to
